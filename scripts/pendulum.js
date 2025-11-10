@@ -18,18 +18,8 @@ let scaleNotes = [220, 247, 294, 330, 370, 440, 494, 554];
 
 let red, blue;
 
-function preload() {
-  // red = loadImage(
-  //   "assets/pendulum/red.webp",
-  //   (img) => console.log("red loaded:", img),
-  //   (err) => console.error("red failed to load", err)
-  // );
-  // blue = loadImage(
-  //   "assets/pendulum/blue.png",
-  //   (img) => console.log("blue loaded:", img),
-  //   (err) => console.error("blue failed to load", err)
-  // );
-}
+let isPlaying = false;
+let playPauseButton;
 
 function setup() {
   createCanvas(windowWidth / 2, windowHeight).parent("canvas");
@@ -42,26 +32,84 @@ function setup() {
   trail.translate(width / 2, height / 3);
   trail.scale(0.5);
 
-  alert("Turn up your volume!");
-
   osc1 = new p5.Oscillator("sine");
   osc2 = new p5.Oscillator("triangle");
-  osc1.start();
-  osc2.start();
   osc1.amp(0);
   osc2.amp(0);
 
   reverb = new p5.Reverb();
-  reverb.process(osc1, 2, 2);
-  reverb.process(osc2, 2, 2);
+  let canvasParent = select("#canvas");
+  if (canvasParent) {
+    canvasParent.style("position", "relative");
+  }
 
-  document.getElementById("save-art").onclick = () => {
-    background(220);
-    translate(-width / 2, -height / 3);
-    imageMode(CORNER);
-    image(trail, 0, 0, width, height);
-    saveCanvas("pendulum_art.jpg");
-  };
+  playPauseButton = createButton("Play");
+  playPauseButton.parent(canvasParent || document.body);
+  playPauseButton.style("position", "absolute");
+  playPauseButton.style("bottom", "10px");
+  playPauseButton.style("right", "10px");
+  playPauseButton.style("padding", "8px 16px");
+  playPauseButton.style("borderRadius", "6px");
+  playPauseButton.style("background", "#222");
+  playPauseButton.style("color", "#fff");
+  playPauseButton.style("fontSize", "14px");
+  playPauseButton.style("zIndex", "9999");
+  playPauseButton.mousePressed(togglePlayPause);
+}
+
+function togglePlayPause() {
+  if (typeof userStartAudio === "function") {
+    userStartAudio()
+      .then(() => {
+        _toggleOscillators();
+      })
+      .catch((err) => {
+        try {
+          let ac = getAudioContext && getAudioContext();
+          if (ac && ac.state === "suspended") {
+            ac.resume().then(() => _toggleOscillators());
+          } else {
+            _toggleOscillators();
+          }
+        } catch (e) {
+          _toggleOscillators();
+        }
+      });
+  } else {
+    try {
+      let ac = getAudioContext && getAudioContext();
+      if (ac && ac.state === "suspended") ac.resume();
+    } catch (e) {}
+    _toggleOscillators();
+  }
+}
+
+function _toggleOscillators() {
+  if (!isPlaying) {
+    try {
+      osc1.start();
+      osc2.start();
+
+      reverb.process(osc1, 2, 2);
+      reverb.process(osc2, 2, 2);
+    } catch (e) {}
+    isPlaying = true;
+    playPauseButton.html("Pause");
+  } else {
+    try {
+      osc1.amp(0, 0.05);
+      osc2.amp(0, 0.05);
+
+      setTimeout(() => {
+        try {
+          osc1.stop();
+          osc2.stop();
+        } catch (e) {}
+      }, 60);
+    } catch (e) {}
+    isPlaying = false;
+    playPauseButton.html("Play");
+  }
 }
 
 function draw() {
@@ -119,25 +167,34 @@ function draw() {
   px2 = x2;
   py2 = y2;
 
-  let freq1 = map(abs(a1_v), 0, 0.2, 200, 800, true);
-  let freq2 = map(abs(a2_v), 0, 0.3, 150, 900, true);
+  if (isPlaying) {
+    let freq1 = map(abs(a1_v), 0, 0.2, 200, 800, true);
+    let freq2 = map(abs(a2_v), 0, 0.3, 150, 900, true);
 
-  freq1 = quantizeToScale(freq1);
-  freq2 = quantizeToScale(freq2);
+    freq1 = quantizeToScale(freq1);
+    freq2 = quantizeToScale(freq2);
 
-  let amp1 = constrain(map(abs(a1_v), 0, 0.2, 0, 0.3), 0, 0.3);
-  let amp2 = constrain(map(abs(a2_v), 0, 0.3, 0, 0.3), 0, 0.3);
+    let amp1 = constrain(map(abs(a1_v), 0, 0.2, 0, 0.3), 0, 0.3);
+    let amp2 = constrain(map(abs(a2_v), 0, 0.3, 0, 0.3), 0, 0.3);
 
-  let pan1 = map(sin(a1), -1, 1, -0.7, 0.7);
-  let pan2 = map(sin(a2), -1, 1, -0.7, 0.7);
+    let pan1 = map(sin(a1), -1, 1, -0.7, 0.7);
+    let pan2 = map(sin(a2), -1, 1, -0.7, 0.7);
 
-  osc1.freq(freq1, 0.1);
-  osc1.amp(amp1, 0.1);
-  osc1.pan(pan1);
+    try {
+      osc1.freq(freq1, 0.1);
+      osc1.amp(amp1, 0.08);
+      osc1.pan(pan1);
 
-  osc2.freq(freq2, 0.1);
-  osc2.amp(amp2, 0.1);
-  osc2.pan(pan2);
+      osc2.freq(freq2, 0.1);
+      osc2.amp(amp2, 0.08);
+      osc2.pan(pan2);
+    } catch (e) {}
+  } else {
+    try {
+      osc1.amp(0, 0.05);
+      osc2.amp(0, 0.05);
+    } catch (e) {}
+  }
 
   frameRate(60);
 }
